@@ -39,6 +39,7 @@ export class MyHttp  {
     // ping_url : url to ping to check connection (should be a resource on the server which is very small (1 byte?)
     constructor(private http: Http) {
         this.ping_delay = 1*60*1000;
+        this.ping_timestamp = Date.now();
         this.ping_status = true;
         this.requestList = {};
         this.requestListMap = {};
@@ -48,7 +49,9 @@ export class MyHttp  {
     // pings the host to check connection status
     // force parameter: will check right away (without waiting for DELAY)
     ping(force: boolean = false) {
-        if (!force && Date.now() + this.ping_delay < this.ping_timestamp) return;
+        if (!force && Date.now() < this.ping_timestamp + this.ping_delay) return;
+
+        this.ping_timestamp = Date.now();
 
         // if url is not provided we set status back to true after DELAY and call the send
         if (!this.ping_url) {
@@ -75,8 +78,9 @@ export class MyHttp  {
     monitor(run: boolean = false) {
         this.ping();
         if (!this.ping_status || run) {
+            var self = this;
             setTimeout(function() {
-                this.monitor();
+                self.monitor();
             }, this.ping_delay);
         }
     }
@@ -109,16 +113,20 @@ export class MyHttp  {
             // the first subscribe AFTER the one in this function should trigger the call
             // todo: how to do that ?
             if (method == "post" || method == "put") req = sub.mergeMap(()=>this.http[method](url, data, options)).share();
-            else req = sub.mergeMap(()=>this.http[method](url, options)).share();
+            else req = sub.mergeMap(()=> {
+              this.http[method](url, options)
+            }).share();
 
             // make hot observable
             req.subscribe(data => {
+                console.log('request succeded');
                 // we should set ping status here and cancel any pings in progress
                 // this.ping_status = true;
                 // remove request from the queue
                 delete this.requestListMap[this.requestList[ts].type + this.requestList[ts].url];
                 delete this.requestList[ts];
             }, err => {
+                console.log('request failed');
                 // if connection failed
                 if (options.resend === false) {
                     delete this.requestListMap[this.requestList[ts].type + this.requestList[ts].url];
@@ -156,26 +164,26 @@ export class MyHttp  {
     // if we start pooling (Observable.interval(1000).mergeMapLatest(myHttp.get('/')).subscribe(data=> {})
     // it should still work ... basicly we should be able to do anything with myHttp.get we are able to do with http.get
     // (should be completely transparent)
-    get(url: string, options: RequestOptionsArgs = {}) {
+    get(url: string, options: any = {}) {
         return this.call('get', url, null, options);
     }
 
     // if another client makes another post request later, we should send both
-    post(url: string, body, options: RequestOptionsArgs) {
+    post(url: string, body, options: any = {}) {
         return this.call('post', url, body, options);
     }
 
     // if another client makes another delete request we send just one
-    delete(url: string, options: RequestOptionsArgs) {
+    delete(url: string, options: any = {}) {
         return this.call('delete', url, null, options);
     }
 
     // if another client tries to make another put request we send both
-    put(url: string, body, options: RequestOptionsArgs = {}) {
+    put(url: string, body, options: any = {}) {
         return this.call('put', url, body, options);
     }
 
-    request(url: string, options: RequestOptionsArgs) {
+    request(url: string, options: any = {}) {
         return this.call('request', url, null, options);
     }
 }
